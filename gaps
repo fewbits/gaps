@@ -1,0 +1,406 @@
+#!/usr/bin/env bash
+
+###########
+# Backlog #
+###########
+
+# [X] TODO: Add items
+# [X] TODO: List items
+# [X] TODO: Generate combinations
+# [X] TODO: Generate decisions
+# [X] TODO: Decide
+# [X] TODO: Work on item
+# [X] TODO: Complete item
+# [X] TODO: Delete item
+# [X] TODO: Create checklist
+
+##########
+# Config #
+##########
+
+configBacklogFile="./backlog.csv"
+configChecklistFile="./checklist.txt"
+configChecklistTemplateFile="./checklist-template.txt"
+configCombinationsFile="./combinations.csv"
+configCompletedFile="./completed.csv"
+configDecisionsFile="./decisions.csv"
+configNextFile="./next.csv"
+
+#############
+# Functions #
+#############
+
+## Checklist
+
+checklistCheck() {
+
+  touch "${configChecklistFile}"
+
+  IFS=$'\n'
+  for check in `cat ${configChecklistTemplateFile}`; do
+    if [[ `grep -e "^${check}$" ${configChecklistFile}` ]]; then
+      continue
+    else
+      echo "${check}" >> "${configChecklistFile}"
+      break
+    fi
+  done
+
+}
+
+checklistEdit() {
+
+  touch "${configChecklistTemplateFile}"
+  vim "${configChecklistTemplateFile}"
+
+}
+
+## Combinations
+
+combinationsGenerate() {
+
+  > "${configCombinationsFile}"
+
+  # Setting newline as the loop separator
+  IFS=$'\n'
+
+  # First loop between items
+  for item1 in `cat "${configBacklogFile}"`; do
+
+    # Second loop between items
+    for item2 in `cat "${configBacklogFile}"`; do
+
+      item1Name=`echo ${item1} | cut -d, -f1`
+      item2Name=`echo ${item2} | cut -d, -f1`
+
+      if [[ "${item1Name}" != "${item2Name}" ]] ; then
+        echo -e "${item1Name}\n${item2Name}" | sort -n | tr '\n' ',' >> "${configCombinationsFile}"
+        echo >> "${configCombinationsFile}"
+      fi
+
+    done
+
+  done
+
+  utilsDedup "${configCombinationsFile}"
+
+}
+
+## Decisions
+
+decisionsForget() {
+
+  rm -f "${configDecisionsFile}"
+
+  touch "${configBacklogFile}"
+
+  IFS=$'\n'
+  for item in `cat ${configBacklogFile}` ; do
+
+    itemName=`echo ${item} | cut -d, -f1`
+
+    sed -i s/^${itemName},.*$/${itemName},0/g "${configBacklogFile}"
+
+
+  done
+
+}
+
+## Help
+
+helpPrint() {
+  echo "GAPS"
+  echo
+  echo "Syntax:"
+  echo "  `basename $0` ACTION"
+  echo
+  echo "Actions:"
+  echo "  add ITEM    - Adds an item to the backlog"
+  echo "  checklist   - Create/edit a checklist for items"
+  echo "  decide      - Decide priority between items"
+  echo "  delete ITEM - Deletes an item from the backlog"
+  echo "  do          - Work on the higher priority item"
+  echo "  forget      - Forgets all decisions made"
+  echo "  help        - Prints this message"
+  echo "  list        - Lists all backlog items"
+  exit 0
+}
+
+## Item
+
+itemAdd() {
+  if [ $1 ]; then
+    usrItem="`utilsNormalize ${@}`"
+  else
+    echo "Error: Missing item name"
+    exit 1
+  fi
+
+  echo "${usrItem},0" >> "${configBacklogFile}"
+
+  utilsDedup "${configBacklogFile}"
+
+  echo "'${usrItem}' added to the backlog"
+  exit 0
+}
+
+itemComplete() {
+
+  thisItem="${@}"
+
+  echo "${thisItem}" >> "${configCompletedFile}"
+
+  sed -i "/^${thisItem},/d" "${configBacklogFile}"
+
+  rm "${configChecklistFile}"
+
+}
+
+itemDecide() {
+
+  combinationsGenerate
+
+  touch "${configDecisionsFile}"
+
+  IFS=$'\n'
+  for combination in `cat ${configCombinationsFile}`; do
+
+    if [[ `grep -e "^${combination}" "${configDecisionsFile}"` ]] ; then
+  
+      sed -i "/^${combination}$/d" "${configCombinationsFile}"
+
+    fi
+
+  done
+
+  decisionsAmount=`cat ${configCombinationsFile} | wc -l | tr -d ' '`
+
+  IFS=$'\n'
+  decisionNumber=0
+  for combination in `cat ${configCombinationsFile}`; do
+
+    item1=`echo "${combination}" | cut -d, -f1`
+    item2=`echo "${combination}" | cut -d, -f2`
+    ((decisionNumber++))
+
+    while [ true ]; do
+
+      clear
+
+      echo "Decision ${decisionNumber}/${decisionsAmount}"
+      echo
+      echo "1. ${item1}"
+      echo "2. ${item2}"
+      echo
+      echo "A. Abort"
+      echo
+
+      read -p "Your choice => " usrChoice
+
+      case $usrChoice in
+        "1")
+          echo "${item1},${item2},${item1}" >> "${configDecisionsFile}"
+          itemVote "${item1}"
+          utilsDedup "${configDecisionsFile}"
+          break
+          ;;
+        "2")
+          echo "${item1},${item2},${item2}" >> "${configDecisionsFile}"
+          itemVote "${item2}"
+          utilsDedup "${configDecisionsFile}"
+          break
+          ;;
+        "a"|"A")
+          exit 0
+          ;;
+      esac
+
+    done
+
+  done
+
+}
+
+itemDelete() {
+
+  if [ $1 ]; then
+    usrItem="`utilsNormalize ${@}`"
+  else
+    echo "Error: Missing item name"
+    exit 1
+  fi
+
+  sed -i "/^${usrItem},/d" "${configBacklogFile}"
+
+  echo "'${usrItem}' deleted from the backlog"
+  exit 0
+
+}
+
+itemDo() {
+
+  nextGenerate
+
+  touch "${configChecklistFile}"
+  touch "${configChecklistTemplateFile}"
+
+  IFS=$'\n'
+  for item in `cat ${configNextFile}`; do
+    itemName=`echo ${item} | cut -d, -f2`
+
+    while [ true ] ; do
+
+      clear
+
+      echo "Working on: ${itemName}"
+      echo
+      echo "Checklist:"
+      IFS=$'\n'
+      for check in `cat ${configChecklistTemplateFile}`; do
+        if [[ `grep -e "^${check}$" ${configChecklistFile}` ]] ; then
+          echo "  [X] ${check}"
+        else
+          echo "  [ ] ${check}"
+        fi
+      done
+      echo
+      echo "C. Check"
+      echo "D. Done"
+      echo "Q. Quit"
+      echo
+      read -p "Your choice => " usrAction
+
+      case "${usrAction}" in
+        "c"|"C")
+          checklistCheck
+          ;;
+        "d"|"D")
+          itemComplete "${itemName}"
+          break
+          ;;
+        "q"|"Q")
+          exit 0
+          ;;
+      esac
+
+    done
+
+  done
+
+
+}
+
+itemList() {
+
+  # The backlog needs to exist
+  touch "${configBacklogFile}"
+
+  nextGenerate
+
+  # Printing the backlog items
+  IFS=$'\n'
+  for item in `cat ${configNextFile}` ; do
+
+    itemVotes=`echo ${item} | cut -d, -f1`
+    itemName=`echo ${item} | cut -d, -f2`
+
+    echo -e "${itemVotes}\t${itemName}"
+
+  done
+
+}
+
+itemVote() {
+
+  thisItem=`grep "^${1}," "${configBacklogFile}"`
+  thisItemName=`echo ${thisItem} | cut -d, -f1`
+  thisItemVotes=`echo ${thisItem} | cut -d, -f2`
+
+  ((thisItemVotes++))
+
+  sed -i s/^${thisItemName},.*$/${thisItemName},${thisItemVotes}/g "${configBacklogFile}"
+
+}
+
+## Next
+
+nextGenerate() {
+
+  > "${configNextFile}"
+
+  IFS=$'\n'
+  for item in `cat ${configBacklogFile}`; do
+    itemName=`echo ${item} | cut -d, -f1`
+    itemVotes=`echo ${item} | cut -d, -f2`
+    echo "${itemVotes},${itemName}" >> "${configNextFile}"
+  done
+
+  sort --numeric-sort --reverse -o "${configNextFile}" "${configNextFile}"
+
+}
+
+## Utils
+
+utilsDedup() {
+
+  # Sorting and removing duplicated lines
+  sort --unique -o "${1}" "${1}"
+
+}
+
+utilsNormalize() {
+
+  # Normalizations
+  #   1 - Converting string to "Title Case"
+  #   2 - Removing commas (,)
+
+  if [ "${1}" ] ; then
+    echo "${@}" | sed -e "s/\b\(.\)/\u\1/g" | tr -d ','
+  fi
+
+}
+
+##########
+# Script #
+##########
+
+if [ $1 ]; then
+  usrAction=$1
+  shift
+else
+  helpPrint
+fi
+
+case $usrAction in
+  "add")
+    itemAdd "${@}"
+    ;;
+  "checklist")
+    checklistEdit
+    ;;
+  "decide")
+    itemDecide
+    ;;
+  "delete")
+    itemDelete "${@}"
+    ;;
+  "do")
+    itemDo
+    ;;
+  "forget")
+    decisionsForget
+    ;;
+  "help")
+    helpPrint
+    ;;
+  "list")
+    itemList
+    ;;
+  "utils-normalize")
+    utilsNormalize "${@}"
+    ;;
+  *)
+    echo "Error: Unknown action '$usrAction'"
+    exit 1
+    ;;
+esac
