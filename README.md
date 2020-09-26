@@ -1,2 +1,7 @@
-# gaps
-Little bash project to prioritize and complete some work
+# GAPS
+
+Little Bash project to prioritize and complete some work
+
+## How to use
+
+> Pending...
