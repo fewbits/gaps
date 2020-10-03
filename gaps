@@ -13,6 +13,7 @@
 # [X] TODO: Complete item
 # [X] TODO: Delete item
 # [X] TODO: Create checklist
+# [ ] TODO: Create default repository/database
 
 ##########
 # Config #
@@ -25,6 +26,161 @@ configCombinationsFile="./combinations.csv"
 configCompletedFile="./completed.csv"
 configDecisionsFile="./decisions.csv"
 configNextFile="./next.csv"
+
+##############
+# Repository #
+##############
+
+repositoryPath="${HOME}/.gaps"
+
+repositoryCheck() {
+
+  if [[ -d "${repositoryPath}" ]] ; then
+    return 0
+  else
+    repositoryCreate
+  fi
+
+}
+
+repositoryCreate() {
+
+  mkdir -p "${repositoryPath}"
+
+}
+
+##########
+# System #
+##########
+
+systemName="GAPS"
+systemVersion="v2.0.0-dev"
+
+systemCheck() {
+
+  repositoryCheck
+
+}
+
+########
+# Menu #
+########
+
+menuOptions="
+  lists
+  items
+  checklist
+  decide
+  work
+"
+
+##################
+# User Interface #
+##################
+
+UIActions() {
+
+  # Spacing
+  echo ; echo
+
+  # Fixed
+  echo "Actions: [new] [select] [delete] [sync] [quit]"
+
+  # Spacing
+  echo
+
+}
+
+UICommand() {
+
+  read -p "Command => " usrCommand
+
+  case $usrCommand in
+
+    # Menu options
+    "lists"|"items"|"checklist"|"decide"|"work")
+      currentMenu=$usrCommand
+      ;;
+
+    # Global actions
+
+    "sync")
+      return 0
+      ;;
+
+    "quit")
+      exit 0
+      ;;
+
+    *)
+      ;;
+
+  esac
+
+}
+
+UIContentWelcome() {
+
+  echo "  Welcome to GAPS system."
+
+}
+
+UIHeader() {
+
+  # Cleaning the screen
+  clear
+
+  # Basic system info + current selected list
+  echo "${systemName} - ${systemVersion} - List: ${currentList:-<none>}"
+  
+  # Spacing
+  echo
+
+}
+
+UIMenu() {
+
+  # Fixed
+  echo -n "Menu:"
+
+  # Menu options
+  for option in $menuOptions ; do
+    if [[ $currentMenu == $option ]] ; then
+      echo -n " [${option^^}]"
+    else
+      echo -n " [${option}]"
+    fi
+  done
+
+  # Spacing
+  echo ; echo ; echo
+
+}
+
+UILoad() {
+
+  thisContent=$1
+
+  while [ true ] ; do
+
+    # Header
+    UIHeader
+
+    # Menu
+    UIMenu
+
+    # Loading the content
+    "${thisContent}"
+
+    # Actions
+    UIActions
+
+    # User command
+    UICommand
+
+  done
+
+}
 
 #############
 # Functions #
@@ -365,6 +521,14 @@ utilsNormalize() {
 ##########
 # Script #
 ##########
+
+# Startup system checks
+systemCheck
+
+# Load user interface
+UILoad UIContentWelcome
+
+exit 0
 
 if [ "${1}" ]; then
   usrAction="${1}"
