@@ -84,6 +84,8 @@ combinationsGenerate() {
 
   utilsDedup "${configCombinationsFile}"
 
+  sort --random-sort -o "${configCombinationsFile}" "${configCombinationsFile}"
+
 }
 
 ## Decisions
@@ -99,7 +101,7 @@ decisionsForget() {
 
     itemName=`echo ${item} | cut -d, -f1`
 
-    sed -i s/^${itemName},.*$/${itemName},0/g "${configBacklogFile}"
+    sed -i s/"^${itemName},.*$"/"${itemName},0"/g "${configBacklogFile}"
 
 
   done
@@ -129,7 +131,7 @@ helpPrint() {
 ## Item
 
 itemAdd() {
-  if [ $1 ]; then
+  if [ "${1}" ]; then
     usrItem="`utilsNormalize ${@}`"
   else
     echo "Error: Missing item name"
@@ -150,9 +152,9 @@ itemComplete() {
 
   echo "${thisItem}" >> "${configCompletedFile}"
 
-  sed -i "/^${thisItem},/d" "${configBacklogFile}"
+  sed -i /"^${thisItem},"/d "${configBacklogFile}"
 
-  rm "${configChecklistFile}"
+  > "${configChecklistFile}"
 
 }
 
@@ -167,7 +169,7 @@ itemDecide() {
 
     if [[ `grep -e "^${combination}" "${configDecisionsFile}"` ]] ; then
   
-      sed -i "/^${combination}$/d" "${configCombinationsFile}"
+      sed -i /"^${combination}$"/d "${configCombinationsFile}"
 
     fi
 
@@ -223,14 +225,14 @@ itemDecide() {
 
 itemDelete() {
 
-  if [ $1 ]; then
+  if [ "${1}" ]; then
     usrItem="`utilsNormalize ${@}`"
   else
     echo "Error: Missing item name"
     exit 1
   fi
 
-  sed -i "/^${usrItem},/d" "${configBacklogFile}"
+  sed -i /"^${usrItem},"/d "${configBacklogFile}"
 
   echo "'${usrItem}' deleted from the backlog"
   exit 0
@@ -318,7 +320,7 @@ itemVote() {
 
   ((thisItemVotes++))
 
-  sed -i s/^${thisItemName},.*$/${thisItemName},${thisItemVotes}/g "${configBacklogFile}"
+  sed -i s/"^${thisItemName},.*$"/"${thisItemName},${thisItemVotes}"/g "${configBacklogFile}"
 
 }
 
@@ -355,7 +357,7 @@ utilsNormalize() {
   #   2 - Removing commas (,)
 
   if [ "${1}" ] ; then
-    echo "${@}" | sed -e "s/\b\(.\)/\u\1/g" | tr -d ','
+    echo "${@}" | sed -e "s/\b\(.\)/\u\1/g" | tr -d ',@/'
   fi
 
 }
@@ -364,8 +366,8 @@ utilsNormalize() {
 # Script #
 ##########
 
-if [ $1 ]; then
-  usrAction=$1
+if [ "${1}" ]; then
+  usrAction="${1}"
   shift
 else
   helpPrint
